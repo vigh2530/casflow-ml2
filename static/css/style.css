@@ -1,0 +1,25 @@
+/* Auto-fill Section Styles */
+.auto-fill-section {
+    border-left: 4px solid #3498db;
+}
+
+.sample-data pre {
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* Form enhancements */
+.form-control:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+}

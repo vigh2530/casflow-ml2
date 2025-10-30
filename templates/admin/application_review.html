@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Application #{{ application.id }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .risk-low { color: #28a745; }
+        .risk-medium { color: #ffc107; }
+        .risk-high { color: #dc3545; }
+        .verification-card { border-left: 4px solid #007bff; }
+        .document-card { border-left: 4px solid #28a745; }
+        .analysis-card { border-left: 4px solid #6f42c1; }
+        .ai-card { border-left: 4px solid #20c997; }
+        .discrepancy-item { border-left: 3px solid #fd7e14; padding-left: 10px; margin-bottom: 8px; }
+        .recommendation-item { border-left: 3px solid #20c997; padding-left: 10px; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1>Review Application</h1>
+                <p class="text-muted mb-0">Application #{{ application.id }} - {{ application.first_name }} {{ application.last_name }}</p>
+            </div>
+            <div>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Left Column - Application Details -->
+            <div class="col-lg-8">
+                <!-- Application Information -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Application Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Name:</strong> {{ application.first_name }} {{ application.last_name }}</p>
+                                <p><strong>Email:</strong> {{ application.email }}</p>
+                                <p><strong>Phone:</strong> {{ application.user.mobile_number if application.user else 'N/A' }}</p>
+                                <p><strong>PAN:</strong> {{ application.pan_number }}</p>
+                                <p><strong>Aadhar:</strong> {{ application.aadhar_number }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Current Status:</strong> 
+                                    <span class="badge {% if application.status == 'APPROVED' %}bg-success{% elif application.status == 'REJECTED' %}bg-danger{% else %}bg-warning{% endif %}">
+                                        {{ application.status }}
+                                    </span>
+                                </p>
+                                <p><strong>Applied On:</strong> {{ application.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                                <p><strong>Monthly Salary:</strong> ₹{{ "{:,.2f}".format(application.monthly_salary) }}</p>
+                                <p><strong>CIBIL Score:</strong> {{ application.cibil_score }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loan Details -->
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-money-bill-wave"></i> Loan Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Loan Amount:</strong> ₹{{ "{:,.2f}".format(application.loan_amount) }}</p>
+                                <p><strong>Property Valuation:</strong> ₹{{ "{:,.2f}".format(application.property_valuation) }}</p>
+                                <p><strong>LTV Ratio:</strong> {{ "%.1f"|format((application.loan_amount / application.property_valuation) * 100) if application.property_valuation else 0 }}%</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Existing EMI:</strong> ₹{{ "{:,.2f}".format(application.existing_emi) }}</p>
+                                <p><strong>Debt-to-Income:</strong> {{ "%.1f"|format((application.existing_emi / application.monthly_salary) * 100) if application.monthly_salary else 0 }}%</p>
+                                <p><strong>Company:</strong> {{ application.company_name or 'N/A' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: AI Analysis Report -->
+                {% if ai_analysis %}
+                <div class="card mb-4 ai-card">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-robot"></i> 🤖 AI Analysis Report</h5>
+                        <button type="button" class="btn btn-sm btn-light" onclick="runAIAnalysis('{{ application.id }}')">
+                            <i class="fas fa-sync-alt"></i> Refresh AI Analysis
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Executive Summary -->
+                        {% if ai_analysis.executive_summary %}
+                        <div class="mb-4">
+                            <h6><i class="fas fa-file-alt"></i> Executive Summary</h6>
+                            <p class="mb-0 p-3 bg-light rounded">{{ ai_analysis.executive_summary }}</p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Risk Scores -->
+                        <div class="row mb-4">
+                            <div class="col-md-3 text-center">
+                                <h3 class="{% if ai_analysis.financial_health_score >= 80 %}risk-low{% elif ai_analysis.financial_health_score >= 60 %}risk-medium{% else %}risk-high{% endif %}">
+                                    {{ ai_analysis.financial_health_score }}/100
+                                </h3>
+                                <p class="mb-0"><strong>Financial Health</strong></p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h3>
+                                    <span class="badge bg-{% if ai_analysis.risk_level == 'LOW' %}success{% elif ai_analysis.risk_level == 'MEDIUM' %}warning{% else %}danger{% endif %} fs-6">
+                                        {{ ai_analysis.risk_level }}
+                                    </span>
+                                </h3>
+                                <p class="mb-0"><strong>Risk Level</strong></p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h3>{{ ai_analysis.rejection_reasons|length }}</h3>
+                                <p class="mb-0"><strong>Risk Factors</strong></p>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <h3>{{ ai_analysis.recommendations|length }}</h3>
+                                <p class="mb-0"><strong>Recommendations</strong></p>
+                            </div>
+                        </div>
+
+                        <!-- Risk Factors -->
+                        {% if ai_analysis.rejection_reasons %}
+                        <div class="mb-4">
+                            <h6><i class="fas fa-exclamation-triangle text-warning"></i> Risk Factors</h6>
+                            {% for reason in ai_analysis.rejection_reasons %}
+                            <div class="discrepancy-item">
+                                <strong>{{ reason.factor }}</strong> 
+                                <span class="badge bg-{% if reason.severity == 'HIGH' %}danger{% elif reason.severity == 'MEDIUM' %}warning{% else %}secondary{% endif %} float-end">
+                                    {{ reason.severity }}
+                                </span>
+                                <p class="mb-1 small">{{ reason.description }}</p>
+                                <small class="text-muted">Impact: {{ reason.impact }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Recommendations -->
+                        {% if ai_analysis.recommendations %}
+                        <div class="mb-4">
+                            <h6><i class="fas fa-lightbulb text-success"></i> Recommendations</h6>
+                            {% for recommendation in ai_analysis.recommendations %}
+                            <div class="recommendation-item">
+                                <strong>{{ recommendation.action }}</strong>
+                                <span class="badge bg-{% if recommendation.priority == 'HIGH' %}danger{% elif recommendation.priority == 'MEDIUM' %}warning{% else %}info{% endif %} float-end">
+                                    {{ recommendation.priority }}
+                                </span>
+                                <p class="mb-1 small">{{ recommendation.description }}</p>
+                                <small class="text-muted">Timeline: {{ recommendation.timeline }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Alternative Offers -->
+                        {% if ai_analysis.alternative_offers %}
+                        <div class="mb-4">
+                            <h6><i class="fas fa-handshake text-primary"></i> Alternative Offers</h6>
+                            {% for offer in ai_analysis.alternative_offers %}
+                            <div class="card mb-2">
+                                <div class="card-body py-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{{ offer.type }}</strong>
+                                            <p class="mb-0 small">₹{{ "{:,.0f}".format(offer.amount) }} • {{ offer.tenure }} • {{ offer.interest_rate }}</p>
+                                        </div>
+                                        <span class="badge bg-info">{{ offer.reason }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- LLM Enhanced Insights -->
+                        {% if ai_analysis.llm_enhanced_insights %}
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <h6><i class="fas fa-brain text-purple"></i> AI Deep Insights</h6>
+                            <div class="row">
+                                {% if ai_analysis.llm_enhanced_insights.risk_breakdown %}
+                                <div class="col-md-6">
+                                    <strong>Risk Breakdown:</strong>
+                                    <ul class="small mb-0 mt-2">
+                                        {% for risk_type, details in ai_analysis.llm_enhanced_insights.risk_breakdown.items() %}
+                                        <li>{{ risk_type|replace('_', ' ')|title }}: {{ details.score }}/100</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                                {% if ai_analysis.llm_enhanced_insights.discrepancy_analysis %}
+                                <div class="col-md-6">
+                                    <strong>Discrepancies Found:</strong>
+                                    <ul class="small mb-0 mt-2">
+                                        {% for discrepancy in ai_analysis.llm_enhanced_insights.discrepancy_analysis %}
+                                        <li>{{ discrepancy.type }} ({{ discrepancy.severity }})</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <!-- AI Analysis Not Available -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="fas fa-robot"></i> AI Analysis</h5>
+                    </div>
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-microchip fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">AI analysis not yet performed</p>
+                        <button type="button" class="btn btn-success" onclick="runAIAnalysis('{{ application.id }}')">
+                            <i class="fas fa-play"></i> Run AI Analysis
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Risk Assessment -->
+                <div class="card mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="fas fa-chart-line"></i> Risk Assessment</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <h3 class="{% if application.overall_risk_score <= 25 %}risk-low{% elif application.overall_risk_score <= 50 %}risk-medium{% elif application.overall_risk_score <= 75 %}risk-high{% else %}text-dark{% endif %}">
+                                    {{ "%.1f"|format(application.overall_risk_score) if application.overall_risk_score else 'N/A' }}/100
+                                </h3>
+                                <p class="mb-0"><strong>Overall Risk Score</strong></p>
+                            </div>
+                            <div class="col-md-4">
+                                <h3 class="{% if credit_report.get('risk_score', 50) <= 25 %}risk-low{% elif credit_report.get('risk_score', 50) <= 50 %}risk-medium{% elif credit_report.get('risk_score', 50) <= 75 %}risk-high{% else %}text-dark{% endif %}">
+                                    {{ credit_report.get('risk_score', 'N/A') }}/100
+                                </h3>
+                                <p class="mb-0"><strong>Credit Risk</strong></p>
+                            </div>
+                            <div class="col-md-4">
+                                <h3 class="{% if fraud_report.get('risk_score', 50) <= 25 %}risk-low{% elif fraud_report.get('risk_score', 50) <= 50 %}risk-medium{% elif fraud_report.get('risk_score', 50) <= 75 %}risk-high{% else %}text-dark{% endif %}">
+                                    {{ fraud_report.get('risk_score', 'N/A') }}/100
+                                </h3>
+                                <p class="mb-0"><strong>Fraud Risk</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Verification Reports -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-check-circle"></i> Verification Reports</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Employment Verification:</strong> 
+                                    <span class="badge {% if application.employment_verification_status == 'VERIFIED' %}bg-success{% else %}bg-warning{% endif %}">
+                                        {{ application.employment_verification_status or 'PENDING' }}
+                                    </span>
+                                </p>
+                                {% if employment_report and employment_report.verification_details %}
+                                <div class="mt-2">
+                                    <small><strong>Details:</strong></small>
+                                    <ul class="small mb-0">
+                                        {% for key, detail in employment_report.verification_details.items() %}
+                                        <li>{{ key|replace('_', ' ')|title }}: {{ detail.note }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Document Verification:</strong> 
+                                    <span class="badge {% if application.document_verification_status == 'VERIFIED' %}bg-success{% else %}bg-warning{% endif %}">
+                                        {{ application.document_verification_status or 'PENDING' }}
+                                    </span>
+                                </p>
+                                {% if document_report and document_report.verified_documents %}
+                                <div class="mt-2">
+                                    <small><strong>Documents:</strong></small>
+                                    <ul class="small mb-0">
+                                        {% for doc_type, doc_info in document_report.verified_documents.items() %}
+                                        <li>{{ doc_type|replace('_', ' ')|title }}: 
+                                            <span class="badge {% if doc_info.status == 'VERIFIED' %}bg-success{% else %}bg-warning{% endif %}">
+                                                {{ doc_info.status }}
+                                            </span>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Admin Actions -->
+            <div class="col-lg-4">
+                <!-- Decision Form -->
+                <div class="card mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0"><i class="fas fa-edit"></i> Make Decision</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="status" class="form-label"><strong>Application Status</strong></label>
+                                <select class="form-select" id="status" name="status" required>
+                                    <option value="PENDING" {% if application.status == 'PENDING' %}selected{% endif %}>Pending</option>
+                                    <option value="APPROVED" {% if application.status == 'APPROVED' %}selected{% endif %}>Approved</option>
+                                    <option value="REJECTED" {% if application.status == 'REJECTED' %}selected{% endif %}>Rejected</option>
+                                </select>
+                            </div>
+
+                            <!-- Loan terms (show only if approving) -->
+                            <div id="loanTerms" style="display: {% if application.status == 'APPROVED' %}block{% else %}none{% endif %};">
+                                <div class="mb-3">
+                                    <label for="interest_rate" class="form-label">Interest Rate (%)</label>
+                                    <input type="number" class="form-control" id="interest_rate" name="interest_rate" 
+                                           step="0.1" min="5" max="20" value="{{ application.interest_rate or 8.5 }}">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="loan_term_years" class="form-label">Loan Term (Years)</label>
+                                    <select class="form-select" id="loan_term_years" name="loan_term_years">
+                                        <option value="5" {% if application.loan_term_years == 5 %}selected{% endif %}>5 Years</option>
+                                        <option value="10" {% if application.loan_term_years == 10 %}selected{% endif %}>10 Years</option>
+                                        <option value="15" {% if application.loan_term_years == 15 %}selected{% endif %}>15 Years</option>
+                                        <option value="20" {% if application.loan_term_years == 20 %}selected{% endif %}>20 Years</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="admin_notes" class="form-label">Admin Notes</label>
+                                <textarea class="form-control" id="admin_notes" name="admin_notes" rows="4" 
+                                          placeholder="Add review notes...">{{ application.admin_review_notes or '' }}</textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-save"></i> Update Application
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Quick Stats</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="small">
+                            <p><strong>Risk Level:</strong> 
+                                <span class="badge {% if application.overall_risk_score <= 25 %}bg-success{% elif application.overall_risk_score <= 50 %}bg-warning{% elif application.overall_risk_score <= 75 %}bg-danger{% else %}bg-dark{% endif %}">
+                                    {% if application.overall_risk_score <= 25 %}LOW
+                                    {% elif application.overall_risk_score <= 50 %}MEDIUM
+                                    {% elif application.overall_risk_score <= 75 %}HIGH
+                                    {% else %}VERY HIGH{% endif %}
+                                </span>
+                            </p>
+                            {% if ai_analysis %}
+                            <p><strong>AI Health Score:</strong> 
+                                <span class="badge {% if ai_analysis.financial_health_score >= 80 %}bg-success{% elif ai_analysis.financial_health_score >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                    {{ ai_analysis.financial_health_score }}/100
+                                </span>
+                            </p>
+                            {% endif %}
+                            <p><strong>Employment Status:</strong> {{ application.employment_status or 'PENDING' }}</p>
+                            <p><strong>KYC Status:</strong> {{ application.kyc_status or 'PENDING' }}</p>
+                            <p><strong>Documents Uploaded:</strong> {{ application.documents|length }}</p>
+                            {% if ai_analysis %}
+                            <p><strong>AI Risk Factors:</strong> {{ ai_analysis.rejection_reasons|length }}</p>
+                            <p><strong>AI Recommendations:</strong> {{ ai_analysis.recommendations|length }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Actions -->
+                <div class="card mt-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-robot"></i> AI Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-success" onclick="runAIAnalysis('{{ application.id }}')">
+                                <i class="fas fa-play"></i> Run AI Analysis
+                            </button>
+                            <button type="button" class="btn btn-outline-info" onclick="getDetailedAIReport('{{ application.id }}')">
+                                <i class="fas fa-file-alt"></i> Get Detailed Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Show/hide loan terms based on status selection
+        document.getElementById('status').addEventListener('change', function() {
+            const loanTerms = document.getElementById('loanTerms');
+            if (this.value === 'APPROVED') {
+                loanTerms.style.display = 'block';
+            } else {
+                loanTerms.style.display = 'none';
+            }
+        });
+
+        // AI Analysis Functions
+        function runAIAnalysis(applicationId) {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running AI Analysis...';
+            button.disabled = true;
+
+            fetch(`/admin/application/${applicationId}/run-ai-analysis`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('AI Analysis completed successfully! Score: ' + data.financial_health_score);
+                    location.reload(); // Refresh to show new analysis
+                } else {
+                    alert('AI Analysis failed: ' + data.error);
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                alert('Error running AI analysis: ' + error);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
+        }
+
+        function getDetailedAIReport(applicationId) {
+            fetch(`/admin/ai-detailed-report/${applicationId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    // Open detailed report in new tab or modal
+                    const reportWindow = window.open('', '_blank');
+                    reportWindow.document.write(`
+                        <html>
+                            <head>
+                                <title>AI Detailed Report - Application ${applicationId}</title>
+                                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                            </head>
+                            <body>
+                                <div class="container mt-4">
+                                    <h2>AI Detailed Analysis Report</h2>
+                                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                                </div>
+                            </body>
+                        </html>
+                    `);
+                    reportWindow.document.close();
+                }
+            })
+            .catch(error => {
+                alert('Error fetching detailed report: ' + error);
+            });
+        }
+    </script>
+</body>
+</html>
